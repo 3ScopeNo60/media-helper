@@ -27,9 +27,9 @@
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>MediaHelperUpdatePublicKey</key>
-	<string></string>
+	<string>dp7U6HFaU+qaTSIPgOmZ+UQIhU0QFY1nmG9Uob5SUqY=</string>
 	<key>MediaHelperUpdateRepo</key>
-	<string></string>
+	<string>3ScopeNo60/media-helper</string>
 	<key>NSDesktopFolderUsageDescription</key>
 	<string>Media Helper can save the audio and video files you ask for on your Desktop.</string>
 	<key>NSDocumentsFolderUsageDescription</key>

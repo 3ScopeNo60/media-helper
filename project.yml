@@ -29,8 +29,8 @@ targets:
         NSDocumentsFolderUsageDescription: "Media Helper can save the audio and video files you ask for in your Documents folder."
         # Updates: "owner/repo" of the public GitHub repository, and the Ed25519 PUBLIC key
         # (base64) that update downloads must be signed with. Filled in by scripts/setup-updates.sh.
-        MediaHelperUpdateRepo: ""
-        MediaHelperUpdatePublicKey: ""
+        MediaHelperUpdateRepo: "3ScopeNo60/media-helper"
+        MediaHelperUpdatePublicKey: "dp7U6HFaU+qaTSIPgOmZ+UQIhU0QFY1nmG9Uob5SUqY="
     settings:
       base:
         PRODUCT_NAME: Media Helper
