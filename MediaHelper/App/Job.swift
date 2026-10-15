@@ -17,6 +17,8 @@ final class Job: Identifiable {
     var title: String
     let subtitle: String?
     let isAudioOutput: Bool
+    /// Optional SF Symbol for the row while it is waiting or running (default: by kind of output).
+    let activeIcon: String?
     private(set) var status: Status = .waiting
     private(set) var statusText = "Waiting…"
     private(set) var progress = 0.0
@@ -25,8 +27,8 @@ final class Job: Identifiable {
     /// The work itself. Gets the job so it can report title/progress/status.
     let work: (Job) async throws -> URL
 
-    init(title: String, subtitle: String? = nil, isAudioOutput: Bool, work: @escaping (Job) async throws -> URL) {
-        self.title = title; self.subtitle = subtitle; self.isAudioOutput = isAudioOutput; self.work = work
+    init(title: String, subtitle: String? = nil, isAudioOutput: Bool, activeIcon: String? = nil, work: @escaping (Job) async throws -> URL) {
+        self.title = title; self.subtitle = subtitle; self.isAudioOutput = isAudioOutput; self.activeIcon = activeIcon; self.work = work
     }
 
     var isActive: Bool { status == .waiting || status == .running }
@@ -61,6 +63,8 @@ final class JobQueue {
     private var runner: Task<Void, Never>?
     /// Called before each job starts (the app uses it to wait for the downloader to finish updating).
     var beforeEachJob: () async -> Void = {}
+    /// Called when the list has run out of work (the slide list uses it to quit PowerPoint/Keynote again if it started them).
+    var whenIdle: () async -> Void = {}
 
     var isBusy: Bool { jobs.contains { $0.isActive } }
 
@@ -76,8 +80,13 @@ final class JobQueue {
         let activity = ProcessInfo.processInfo.beginActivity(
             options: [.userInitiated, .idleSystemSleepDisabled], reason: "Media Helper is downloading or converting")
         runner = Task { [weak self] in
-            while let self, let next = self.jobs.first(where: { $0.status == .waiting }) {
-                await self.process(next)
+            while let self {
+                while let next = self.jobs.first(where: { $0.status == .waiting }) {
+                    await self.process(next)
+                }
+                await self.whenIdle()
+                // Something may have been added while the idle work ran.
+                if !self.jobs.contains(where: { $0.status == .waiting }) { break }
             }
             ProcessInfo.processInfo.endActivity(activity)
             self?.runner = nil

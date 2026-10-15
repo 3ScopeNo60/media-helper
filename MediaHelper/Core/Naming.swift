@@ -44,4 +44,12 @@ enum Naming {
         while fileManager.fileExists(atPath: candidate(n).path) { n += 1 }
         return candidate(n)
     }
+
+    /// `folder/name`, or `name 2`, `name 3` … for a new folder that must not clash with anything.
+    static func uniqueFolderURL(in folder: URL, baseName: String, fileManager: FileManager = .default) -> URL {
+        var n = 1
+        func candidate(_ n: Int) -> URL { folder.appendingPathComponent(n == 1 ? baseName : "\(baseName) \(n)", isDirectory: true) }
+        while fileManager.fileExists(atPath: candidate(n).path) { n += 1 }
+        return candidate(n)
+    }
 }

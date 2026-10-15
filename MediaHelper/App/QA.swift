@@ -7,11 +7,12 @@ import AppKit
 ///   -qaInstallTools                                   install any missing tools (honours -toolsDir)
 ///   -qaDownload <link> audio|video [-qaFormat mp3|m4a] [-qaQuality best|720|480] [-qaCancelAfter <seconds>] -saveTo <folder>
 ///   -qaConvert <file> mp3|m4a  (-saveTo <folder> | -nextToOriginal)
+///   -qaSlides <file> png|jpeg [-qaSize fullhd|4k|original] [-qaPrefix <text>] [-qaRenderer libreoffice|powerpoint|keynote] [-qaCancelAfter <seconds>] -saveTo <folder>
 ///   -qaUpdateTool                                     update the downloader the way a stale-tool retry does
 ///   -qaUpdateCheck                                    uses -updateFeed / -updateKey / -currentVersion
 ///   -qaUpdateInstall                                  check, then install if an update is offered
 enum QA {
-    static let flags = ["-qaVersions", "-qaInstallTools", "-qaDownload", "-qaConvert", "-qaUpdateTool", "-qaUpdateCheck", "-qaUpdateInstall"]
+    static let flags = ["-qaVersions", "-qaInstallTools", "-qaDownload", "-qaConvert", "-qaSlides", "-qaUpdateTool", "-qaUpdateCheck", "-qaUpdateInstall"]
 
     static func say(_ s: String) {
         FileHandle.standardOutput.write(Data((s + "\n").utf8))
@@ -100,6 +101,42 @@ enum QA {
             say("QA_RESULT \(out.path)")
             finish(0)
 
+        case "-qaSlides":
+            guard let file = Flags.value("-qaSlides"), let fmt = second(of: "-qaSlides"), let format = SlideImageFormat(rawValue: fmt),
+                  let folder = Flags.value("-saveTo") else {
+                throw HelperError.message("usage: -qaSlides <file> png|jpeg [-qaSize fullhd|4k|original] [-qaPrefix <text>] [-qaRenderer libreoffice|powerpoint|keynote] -saveTo <folder>")
+            }
+            let size = Flags.value("-qaSize").flatMap(slideSize(named:)) ?? .fullHD
+            let forced = Flags.value("-qaRenderer").flatMap(renderer(named:))
+            let installed = SlideRenderer.detectInstalled()
+            say("QA_INSTALLED libreOffice=\(installed.libreOffice != nil) powerPoint=\(installed.powerPoint != nil) keynote=\(installed.keynote != nil)")
+            let ext = URL(fileURLWithPath: file).pathExtension
+            if ext.lowercased() != "pdf" {
+                say("QA_RENDERER \(SlideRenderer.choose(forExtension: ext, installed: installed, forced: forced)?.title ?? "none")")
+            }
+            let status = StatusPrinter()
+            let token = CancelToken()
+            if let after = Flags.value("-qaCancelAfter").flatMap(Double.init) {
+                DispatchQueue.global().asyncAfter(deadline: .now() + after) { say("QA_CANCEL requested"); token.cancel() }
+            }
+            let out: URL
+            do {
+                out = try await SlideConverter.convert(
+                    input: URL(fileURLWithPath: file), options: .init(format: format, size: size, prefix: Flags.value("-qaPrefix") ?? ""),
+                    saveFolder: URL(fileURLWithPath: folder, isDirectory: true), token: token, forcedRenderer: forced,
+                    onStatus: { status.print("status: \($0)") }, onProgress: { _ in })
+            } catch HelperError.cancelled {
+                await OfficeExporter.quitAppsWeStarted()
+                say("QA_CANCELLED")
+                finish(0)
+            } catch {
+                await OfficeExporter.quitAppsWeStarted()
+                throw error
+            }
+            await OfficeExporter.quitAppsWeStarted()
+            say("QA_RESULT \(out.path)")
+            finish(0)
+
         case "-qaUpdateTool":
             let before = await Tools.versions().downloader ?? "none"
             let after = try await ToolInstaller.updateDownloader()
@@ -124,6 +161,13 @@ enum QA {
 
         default: finish(64)
         }
+    }
+
+    static func slideSize(named n: String) -> SlideSize? {
+        ["fullhd": SlideSize.fullHD, "4k": .fourK, "original": .original][n.lowercased()]
+    }
+    static func renderer(named n: String) -> SlideRenderer? {
+        ["libreoffice": SlideRenderer.libreOffice, "powerpoint": .powerPoint, "keynote": .keynote][n.lowercased()]
     }
 
     @MainActor

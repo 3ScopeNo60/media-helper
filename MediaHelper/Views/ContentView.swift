@@ -16,18 +16,19 @@ struct ContentView: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .controlSize(.large)
-                .disabled(!model.tools.isReady)
 
-                if !model.tools.isReady { SetupCard() }
+                // The slide tab needs none of the downloaded tools, so it is usable straight away.
+                if !model.tools.isReady && model.section != .slides { SetupCard() }
 
                 Group {
                     switch model.section {
                     case .download: DownloadView()
                     case .convert: ConvertView(dropTargeted: dropTargeted)
+                    case .slides: SlidesView(dropTargeted: dropTargeted)
                     }
                 }
-                .disabled(!model.tools.isReady)
-                .opacity(model.tools.isReady ? 1 : 0.45)
+                .disabled(!model.acceptsDrops())
+                .opacity(model.acceptsDrops() ? 1 : 0.45)
             }
             .padding(.horizontal, 20)
             .padding(.top, 16)
@@ -38,7 +39,7 @@ struct ContentView: View {
         .frame(minWidth: 620, minHeight: 640)
         .background(Color(nsColor: .windowBackgroundColor))
         .onDrop(of: [.fileURL], isTargeted: $dropTargeted) { providers in
-            guard model.tools.isReady else { return false }
+            guard model.acceptsDrops() else { return false }
             var urls: [URL] = []
             let group = DispatchGroup()
             for p in providers where p.canLoadObject(ofClass: URL.self) {
@@ -47,7 +48,7 @@ struct ContentView: View {
                     if let url { DispatchQueue.main.async { urls.append(url); group.leave() } } else { group.leave() }
                 }
             }
-            group.notify(queue: .main) { model.addVideos(urls) }
+            group.notify(queue: .main) { model.handleDrop(urls) }
             return true
         }
         .task { model.start() }

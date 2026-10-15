@@ -51,7 +51,7 @@ struct JobRowView: View {
         case .done: return "checkmark.circle.fill"
         case .failed: return "exclamationmark.triangle.fill"
         case .cancelled: return "xmark.circle"
-        default: return job.isAudioOutput ? "waveform.circle" : "arrow.down.circle"
+        default: return job.activeIcon ?? (job.isAudioOutput ? "waveform.circle" : "arrow.down.circle")
         }
     }
     private var tint: Color {

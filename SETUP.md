@@ -13,7 +13,7 @@ You need: the Mac, an internet connection (once, for the first start), and the f
    * If you see "Media Helper can't be opened": open **System Settings ▸ Privacy & Security**, scroll down,
      and click **Open Anyway** next to the Media Helper message.
 3. The window says **"Getting ready… (one-time setup, needs internet)"**. Wait a minute or so while the
-   Mac downloads what it needs. When the two tabs become active, it's ready.
+   Mac downloads what it needs. When the first two tabs become active, it's ready. (The **Slides → Images** tab needs no setup and works straight away.)
    * If it says it couldn't finish, check the internet connection and click **Try Again**.
 4. The first time you save to Downloads, macOS may ask whether Media Helper can access files in your
    Downloads folder. Click **OK**.
@@ -27,9 +27,13 @@ is downloading or converting.)
 
 * **Download from YouTube:** paste links (one per line), choose Audio or Video, click **Download**.
 * **Video → Audio:** drag video files onto the window, or click **Choose Files…**.
+* **Slides → Images:** drag PowerPoint, Keynote or PDF files onto the window, or click **Choose Files…**. Each file gets its own folder of pictures. **PowerPoint files need Keynote, PowerPoint or LibreOffice on that Mac** (Keynote is free in the App Store, LibreOffice is free at libreoffice.org). PDFs need nothing extra.
 * **Save to:** shows where files go. Click **Change…** to pick another folder.
 
 ## If something doesn't work
+
+* **The first time you turn a PowerPoint or Keynote file into pictures**, macOS asks whether Media Helper may control Keynote (or PowerPoint). Click **OK**. If you clicked Don't Allow by mistake: System Settings ▸ Privacy & Security ▸ Automation ▸ turn Keynote/PowerPoint on under Media Helper.
+* *"To turn PowerPoint files into pictures, this Mac needs…"*: install Keynote (App Store) or LibreOffice, then try again.
 
 * *"YouTube is limiting requests from this Mac"*: wait a few minutes and try again.
 * *"That video is unavailable or private"*: the video can't be downloaded; try another.

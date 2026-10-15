@@ -24,9 +24,10 @@ targets:
         LSMinimumSystemVersion: "14.0"
         LSApplicationCategoryType: public.app-category.video
         NSHumanReadableCopyright: ""
-        NSDownloadsFolderUsageDescription: "Media Helper saves the audio and video files you ask for in your Downloads folder."
-        NSDesktopFolderUsageDescription: "Media Helper can save the audio and video files you ask for on your Desktop."
-        NSDocumentsFolderUsageDescription: "Media Helper can save the audio and video files you ask for in your Documents folder."
+        NSDownloadsFolderUsageDescription: "Media Helper saves the audio, video and picture files you ask for in your Downloads folder."
+        NSDesktopFolderUsageDescription: "Media Helper can save the audio, video and picture files you ask for on your Desktop."
+        NSAppleEventsUsageDescription: "Media Helper uses PowerPoint or Keynote to turn slides into images."
+        NSDocumentsFolderUsageDescription: "Media Helper can save the audio, video and picture files you ask for in your Documents folder."
         # Updates: "owner/repo" of the public GitHub repository, and the Ed25519 PUBLIC key
         # (base64) that update downloads must be signed with. Filled in by scripts/setup-updates.sh.
         MediaHelperUpdateRepo: "3ScopeNo60/media-helper"

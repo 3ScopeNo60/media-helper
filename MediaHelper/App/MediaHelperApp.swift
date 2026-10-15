@@ -36,7 +36,7 @@ struct MediaHelperApp: App {
     private func showAbout(_ model: AppModel) {
         let v = model.tools.versions
         let text = """
-        Download audio and video from YouTube, and turn videos into audio files.
+        Download audio and video from YouTube, turn videos into audio files, and turn slides into pictures.
 
         Tools: downloader \(v.downloader ?? "not installed"), converter \(v.converter ?? "not installed").
         """
@@ -55,5 +55,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         MainActor.assumeIsolated { model?.cancelEverything() }
         Thread.sleep(forTimeInterval: 0.3)
+        OfficeExporter.closeLeftoversBlocking()   // a slide copy still open in PowerPoint/Keynote
     }
 }

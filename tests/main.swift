@@ -2,6 +2,8 @@
 // with MediaHelper/Core/*.swift (no Xcode project needed).
 import Foundation
 import CryptoKit
+import CoreGraphics
+import ImageIO
 
 var passed = 0, failed = 0
 func check(_ ok: Bool, _ name: String, _ detail: @autoclosure () -> String = "") {
@@ -39,6 +41,88 @@ do {
     eq(Naming.uniqueURL(in: dir, baseName: "Song", ext: "mp3").lastPathComponent, "Song 3.mp3", "unique: ' 2' taken -> ' 3'")
     eq(Naming.uniqueURL(in: dir, baseName: "Song", ext: "mp4").lastPathComponent, "Song.mp4", "unique: other extension unaffected")
 } catch { check(false, "unique: setup", "\(error)") }
+
+// MARK: Slides -> images: file names
+eq(SlideNaming.fileName(prefix: "", name: "Sunday_Slides", number: 1, total: 12, ext: "png"), "Sunday_Slides_01.png", "slides: example name from the screen")
+eq(SlideNaming.fileName(prefix: "Easter_", name: "Talk", number: 3, total: 5, ext: "jpg"), "Easter_Talk_03.jpg", "slides: prefix goes in front")
+eq(SlideNaming.fileName(prefix: "", name: "Talk", number: 7, total: 99, ext: "png"), "Talk_07.png", "slides: 99 slides still two digits")
+eq(SlideNaming.fileName(prefix: "", name: "Talk", number: 7, total: 100, ext: "png"), "Talk_007.png", "slides: 100 slides -> three digits so they sort")
+eq(SlideNaming.fileName(prefix: "", name: "Talk", number: 1, total: 1, ext: "png"), "Talk_01.png", "slides: a single slide is still _01")
+eq(SlideNaming.fileName(prefix: "", name: "Talk", number: 1234, total: 1234, ext: "png"), "Talk_1234.png", "slides: four digits when needed")
+eq(SlideNaming.fileName(prefix: "A/B: ", name: "x*y?", number: 2, total: 3, ext: "png"), "A-B - xy_02.png", "slides: unsafe characters cleaned in prefix and name")
+eq(SlideNaming.fileName(prefix: "", name: "", number: 2, total: 3, ext: "png"), "Slides_02.png", "slides: empty name falls back")
+let sortedNames = (1...120).map { SlideNaming.fileName(prefix: "", name: "T", number: $0, total: 120, ext: "png") }
+check(sortedNames == sortedNames.sorted(), "slides: 120 names sort in slide order as plain text")
+eq(SlideImageFormat.png.ext, "png", "slides: PNG extension"); eq(SlideImageFormat.jpeg.ext, "jpg", "slides: JPEG extension is .jpg")
+
+// MARK: Slides -> images: sizes
+func px(_ z: SlideSize, _ w: Double, _ h: Double) -> String { let r = z.pixelSize(forPage: CGSize(width: w, height: h)); return "\(r.width)x\(r.height)" }
+eq(px(.fullHD, 960, 540), "1920x1080", "size: Full HD, 16:9 page")
+eq(px(.fourK, 960, 540), "3840x2160", "size: 4K, 16:9 page")
+eq(px(.original, 960, 540), "960x540", "size: original keeps the page's own size")
+eq(px(.fullHD, 720, 540), "1920x1440", "size: Full HD keeps a 4:3 shape")
+eq(px(.fourK, 540, 960), "3840x6827", "size: 4K portrait page is 3840 wide, shape kept")
+eq(px(.original, 612, 792), "612x792", "size: US Letter original")
+eq(px(.fullHD, 841.89, 595.28), "1920x1358", "size: A4 landscape at Full HD")
+eq(px(.original, 20000, 10000), "16000x8000", "size: huge pages are capped at 16000 px")
+eq(px(.fullHD, 0, 0), "1920x1920", "size: broken zero-size page can't crash")
+check((1...50).allSatisfy { i in let r = SlideSize.fullHD.pixelSize(forPage: CGSize(width: 960, height: 400 + Double(i) * 7)); return abs(Double(r.width) / Double(r.height) - 960 / (400 + Double(i) * 7)) < 0.002 }, "size: shape is preserved for many page shapes")
+eq(SlideSize.allCases.map(\.title), ["Full HD (1920 wide)", "4K (3840 wide)", "Original size"], "size: menu wording")
+
+// MARK: Slides -> images: which program makes the PDF
+let all = SlideRenderer.Installed(libreOffice: URL(fileURLWithPath: "/x/soffice"), powerPoint: URL(fileURLWithPath: "/x/PP.app"), keynote: URL(fileURLWithPath: "/x/KN.app"))
+let noLO = SlideRenderer.Installed(libreOffice: nil, powerPoint: all.powerPoint, keynote: all.keynote)
+let onlyKN = SlideRenderer.Installed(libreOffice: nil, powerPoint: nil, keynote: all.keynote)
+let onlyLO = SlideRenderer.Installed(libreOffice: all.libreOffice, powerPoint: nil, keynote: nil)
+let none = SlideRenderer.Installed(libreOffice: nil, powerPoint: nil, keynote: nil)
+check(SlideRenderer.choose(forExtension: "pptx", installed: all) == .libreOffice, "renderer: pptx prefers LibreOffice")
+check(SlideRenderer.choose(forExtension: "ppt", installed: all) == .libreOffice, "renderer: ppt prefers LibreOffice")
+check(SlideRenderer.choose(forExtension: "pptx", installed: noLO) == .powerPoint, "renderer: no LibreOffice -> PowerPoint")
+check(SlideRenderer.choose(forExtension: "PPTX", installed: noLO) == .powerPoint, "renderer: extension is case-insensitive")
+check(SlideRenderer.choose(forExtension: "pptx", installed: onlyKN) == .keynote, "renderer: only Keynote -> Keynote")
+check(SlideRenderer.choose(forExtension: "pptx", installed: onlyLO) == .libreOffice, "renderer: only LibreOffice -> LibreOffice")
+check(SlideRenderer.choose(forExtension: "pptx", installed: none) == nil, "renderer: nothing installed -> none")
+check(SlideRenderer.choose(forExtension: "key", installed: all) == .keynote, "renderer: .key always Keynote")
+check(SlideRenderer.choose(forExtension: "key", installed: onlyLO) == nil, "renderer: .key without Keynote -> none")
+check(SlideRenderer.choose(forExtension: "pptx", installed: all, forced: .keynote) == .keynote, "renderer: forced Keynote honoured")
+check(SlideRenderer.choose(forExtension: "pptx", installed: onlyKN, forced: .powerPoint) == nil, "renderer: forced but missing -> none")
+check(SlideRenderer.choose(forExtension: "key", installed: all, forced: .powerPoint) == nil, "renderer: .key can't be forced onto PowerPoint")
+check(SlideRenderer.missingMessage(forExtension: "pptx").contains("Keynote") && SlideRenderer.missingMessage(forExtension: "pptx").contains("LibreOffice"), "renderer: missing-program message names the free options")
+check(SlideConverter.isSupported(URL(fileURLWithPath: "/a/b.PPTX")) && SlideConverter.isSupported(URL(fileURLWithPath: "/a/b.key")) && SlideConverter.isSupported(URL(fileURLWithPath: "/a/b.pdf")) && SlideConverter.isSupported(URL(fileURLWithPath: "/a/b.ppt")), "slides: accepted file types")
+check(!SlideConverter.isSupported(URL(fileURLWithPath: "/a/b.mp4")) && !SlideConverter.isSupported(URL(fileURLWithPath: "/a/b.docx")), "slides: other file types refused")
+check(OfficeExporter.explain(stderr: "x (-1743)", appTitle: "Keynote").contains("Automation"), "office: 'not allowed' error explained")
+check(!OfficeExporter.explain(stderr: "x (-1743)", appTitle: "Keynote").contains("-1743"), "office: no error codes shown to people")
+check(OfficeExporter.libreOfficeArguments(input: URL(fileURLWithPath: "/in/a b.pptx"), outDir: URL(fileURLWithPath: "/out"), profileDir: URL(fileURLWithPath: "/p")).contains("--headless"), "office: LibreOffice runs headless")
+do {
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mh-test-\(UUID())")
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: dir) }
+    eq(Naming.uniqueFolderURL(in: dir, baseName: "Deck").lastPathComponent, "Deck", "unique folder: free name used as is")
+    try FileManager.default.createDirectory(at: dir.appendingPathComponent("Deck"), withIntermediateDirectories: true)
+    eq(Naming.uniqueFolderURL(in: dir, baseName: "Deck").lastPathComponent, "Deck 2", "unique folder: existing -> ' 2'")
+    try FileManager.default.createDirectory(at: dir.appendingPathComponent("Deck 2"), withIntermediateDirectories: true)
+    eq(Naming.uniqueFolderURL(in: dir, baseName: "Deck").lastPathComponent, "Deck 3", "unique folder: ' 2' taken -> ' 3'")
+    // A small real PDF: one landscape page and one portrait page, rendered at every size.
+    let pdf = dir.appendingPathComponent("t.pdf")
+    var box = CGRect(x: 0, y: 0, width: 400, height: 300)
+    let c = CGContext(pdf as CFURL, mediaBox: &box, nil)!
+    c.beginPDFPage(nil); c.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1)); c.fill(CGRect(x: 0, y: 0, width: 50, height: 50)); c.endPDFPage()
+    var portrait = CGRect(x: 0, y: 0, width: 300, height: 400)
+    c.beginPDFPage([kCGPDFContextMediaBox as String: Data(bytes: &portrait, count: MemoryLayout<CGRect>.size)] as CFDictionary); c.endPDFPage()
+    c.closePDF()
+    let out = dir.appendingPathComponent("o"); try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+    let n = try SlideConverter.renderPages(pdf: pdf, into: out, name: "T", options: .init(format: .jpeg, size: .original, prefix: "P_"), token: nil)
+    eq(n, 2, "render: two pages -> two pictures")
+    eq(try FileManager.default.contentsOfDirectory(atPath: out.path).sorted(), ["P_T_01.jpg", "P_T_02.jpg"], "render: file names")
+    let src = CGImageSourceCreateWithURL(out.appendingPathComponent("P_T_02.jpg") as CFURL, nil)!
+    let img = CGImageSourceCreateImageAtIndex(src, 0, nil)!
+    eq("\(img.width)x\(img.height)", "300x400", "render: portrait page keeps its shape")
+    let tok = CancelToken(); tok.cancel()
+    do { _ = try SlideConverter.renderPages(pdf: pdf, into: out, name: "T", options: .init(), token: tok); check(false, "render: cancel") }
+    catch { check((error as? HelperError) == .cancelled, "render: a cancelled job stops before drawing") }
+    do { _ = try SlideConverter.renderPages(pdf: dir.appendingPathComponent("o"), into: out, name: "T", options: .init(), token: nil); check(false, "render: not a pdf") }
+    catch { check((error as? HelperError)?.errorDescription?.contains("PDF") == true, "render: a file that isn't a PDF gives a plain message") }
+} catch { check(false, "slides: setup", "\(error)") }
 
 // MARK: Links
 eq(YouTubeDownloader.normalizedLink("https://www.youtube.com/watch?v=jNQXAC9IVRw"), "https://www.youtube.com/watch?v=jNQXAC9IVRw", "link: full URL accepted")

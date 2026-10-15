@@ -4,9 +4,15 @@ import Observation
 import UniformTypeIdentifiers
 
 enum AppSection: String, CaseIterable, Identifiable {
-    case download, convert
+    case download, convert, slides
     var id: String { rawValue }
-    var title: String { self == .download ? "Download from YouTube" : "Video → Audio" }
+    var title: String {
+        switch self {
+        case .download: return "Download from YouTube"
+        case .convert: return "Video → Audio"
+        case .slides: return "Slides → Images"
+        }
+    }
 }
 
 enum DownloadKind: String, CaseIterable, Identifiable {
@@ -22,6 +28,7 @@ final class AppModel {
     let updates = UpdateManager.shared
     let downloads = JobQueue()
     let conversions = JobQueue()
+    let slides = JobQueue()
 
     var section: AppSection = .download
 
@@ -37,12 +44,18 @@ final class AppModel {
     var convertNextToOriginal: Bool { didSet { UserDefaults.standard.set(convertNextToOriginal, forKey: "convertNextToOriginal") } }
     var skippedFiles = 0
 
+    // Slides → Images tab
+    var slideFormat: SlideImageFormat { didSet { save(slideFormat.rawValue, "slideFormat") } }
+    var slideSize: SlideSize { didSet { save(slideSize.rawValue, "slideSize") } }
+    var slidePrefix: String { didSet { save(slidePrefix, "slidePrefix") } }
+    var skippedSlideFiles = 0
+
     // Shared
     var saveFolder: URL {
         didSet { UserDefaults.standard.set(saveFolder.path, forKey: "saveFolderPath") }
     }
 
-    var isBusy: Bool { downloads.isBusy || conversions.isBusy }
+    var isBusy: Bool { downloads.isBusy || conversions.isBusy || slides.isBusy }
 
     init() {
         let d = UserDefaults.standard
@@ -51,6 +64,9 @@ final class AppModel {
         videoQuality = YouTubeDownloader.VideoQuality(rawValue: d.string(forKey: "videoQuality") ?? "") ?? .best
         convertFormat = AudioFormat(rawValue: d.string(forKey: "convertFormat") ?? "") ?? .mp3
         convertNextToOriginal = d.bool(forKey: "convertNextToOriginal")
+        slideFormat = SlideImageFormat(rawValue: d.string(forKey: "slideFormat") ?? "") ?? .png
+        slideSize = SlideSize(rawValue: d.string(forKey: "slideSize") ?? "") ?? .fullHD
+        slidePrefix = d.string(forKey: "slidePrefix") ?? ""
         if let p = d.string(forKey: "saveFolderPath"), FileManager.default.fileExists(atPath: p) {
             saveFolder = URL(fileURLWithPath: p, isDirectory: true)
         } else {
@@ -66,8 +82,9 @@ final class AppModel {
         updates.isBusy = busy
         let wait: () async -> Void = { await ToolInstaller.waitUntilNotUpdating() }
         downloads.beforeEachJob = wait
+        slides.whenIdle = { await OfficeExporter.quitAppsWeStarted() }
         tools.prepare()
-        if Flags.has("-qaSection") || Flags.has("-qaAutoDownload") || Flags.has("-qaAutoConvert") {
+        if Flags.has("-qaSection") || Flags.has("-qaAutoDownload") || Flags.has("-qaAutoConvert") || Flags.has("-qaAutoSlides") {
             Task { [weak self] in await self?.runQAAutoActions() }
         }
         Task { [weak self] in
@@ -84,6 +101,11 @@ final class AppModel {
     /// (Every value must follow its flag: a stray word on the command line is treated by macOS as a file to open.)
     private func runQAAutoActions() async {
         if let s = Flags.value("-qaSection"), let sec = AppSection(rawValue: s) { section = sec }
+        if let f = Flags.value("-qaSlideFormat").flatMap(SlideImageFormat.init(rawValue:)) { slideFormat = f }
+        if let z = Flags.value("-qaSize").flatMap(QA.slideSize(named:)) { slideSize = z }
+        if let x = Flags.value("-qaPrefix") { slidePrefix = x }
+        let slideFiles = Flags.values("-qaAutoSlides").map { URL(fileURLWithPath: $0) }
+        if !slideFiles.isEmpty { addSlides(slideFiles) }
         while !tools.isReady { try? await Task.sleep(for: .milliseconds(300)) }
         if let link = Flags.value("-qaAutoDownload") {
             downloadKind = Flags.value("-qaAutoKind") == "video" ? .video : .audio
@@ -174,12 +196,69 @@ final class AppModel {
         if panel.runModal() == .OK { addVideos(panel.urls) }
     }
 
+    // MARK: Slides
+
+    /// Adds PowerPoint, Keynote and PDF files (or folders of them) to the slide list.
+    func addSlides(_ urls: [URL]) {
+        var files: [URL] = []
+        var skipped = 0
+        for url in urls {
+            var isDir: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) else { continue }
+            if isDir.boolValue && url.pathExtension.lowercased() != "key" {   // a .key can be a folder-like package
+                let kids = (try? FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])) ?? []
+                for k in kids.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) where SlideConverter.isSupported(k) { files.append(k) }
+            } else if SlideConverter.isSupported(url) { files.append(url) } else { skipped += 1 }
+        }
+        skippedSlideFiles = skipped
+        let options = SlideConverter.Options(format: slideFormat, size: slideSize, prefix: slidePrefix)
+        let folder = saveFolder
+        let forced = Flags.value("-qaRenderer").flatMap(QA.renderer(named:))
+        for file in files {
+            let job = Job(title: file.lastPathComponent, isAudioOutput: false, activeIcon: "photo.on.rectangle") { job in
+                try await SlideConverter.convert(
+                    input: file, options: options, saveFolder: folder, token: job.token, forcedRenderer: forced,
+                    onStatus: { job.report(status: $0) }, onProgress: { job.report(progress: $0) })
+            }
+            slides.add(job)
+        }
+        if !files.isEmpty { section = .slides }
+    }
+
+    func chooseSlides() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose slides"
+        panel.prompt = "Add"
+        panel.allowsMultipleSelection = true
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = true
+        panel.allowedContentTypes = ["pptx", "ppt", "key", "pdf"].compactMap { UTType(filenameExtension: $0) }
+        if panel.runModal() == .OK { addSlides(panel.urls) }
+    }
+
+    /// Files dropped on the window go to the list that fits them: slides and PDFs to Slides → Images,
+    /// anything else to Video → Audio. (On the Slides tab everything goes to the slide list.)
+    func handleDrop(_ urls: [URL]) {
+        func isSlide(_ u: URL) -> Bool {
+            var d: ObjCBool = false
+            if FileManager.default.fileExists(atPath: u.path, isDirectory: &d), d.boolValue, u.pathExtension.lowercased() != "key" {
+                let kids = (try? FileManager.default.contentsOfDirectory(at: u, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])) ?? []
+                return kids.contains { SlideConverter.isSupported($0) } && !kids.contains { MediaConverter.isSupportedVideo($0) }
+            }
+            return SlideConverter.isSupported(u)
+        }
+        if section == .slides || (!urls.isEmpty && urls.allSatisfy(isSlide)) { addSlides(urls) } else { addVideos(urls) }
+    }
+
+    /// The slide list needs no downloaded tools, so it works even before the first-time setup has finished.
+    func acceptsDrops() -> Bool { tools.isReady || section == .slides }
+
     // MARK: Misc
 
     func showInFinder(_ url: URL) { NSWorkspace.shared.activateFileViewerSelecting([url]) }
     func openSaveFolder() { NSWorkspace.shared.open(saveFolder) }
 
     func cancelEverything() {
-        downloads.cancelAll(); conversions.cancelAll()
+        downloads.cancelAll(); conversions.cancelAll(); slides.cancelAll()
     }
 }
