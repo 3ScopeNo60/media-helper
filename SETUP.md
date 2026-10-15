@@ -27,7 +27,7 @@ is downloading or converting.)
 
 * **Download from YouTube:** paste links (one per line), choose Audio or Video, click **Download**.
 * **Video → Audio:** drag video files onto the window, or click **Choose Files…**.
-* **Slides → Images:** drag PowerPoint, Keynote or PDF files onto the window, or click **Choose Files…**. Each file gets its own folder of pictures. **PowerPoint files need Keynote, PowerPoint or LibreOffice on that Mac** (Keynote is free in the App Store, LibreOffice is free at libreoffice.org). PDFs need nothing extra.
+* **Slides → Images:** drag PowerPoint, Keynote or PDF files onto the window, or click **Choose Files…**. Each file gets its own folder of pictures. **PowerPoint files need Keynote, PowerPoint or LibreOffice on that Mac** (Keynote is free in the App Store, LibreOffice is free at libreoffice.org). Keynote files use Keynote, or LibreOffice if Keynote isn't installed. PDFs need nothing extra. With LibreOffice, nothing asks for permission.
 * **Save to:** shows where files go. Click **Change…** to pick another folder.
 
 ## If something doesn't work

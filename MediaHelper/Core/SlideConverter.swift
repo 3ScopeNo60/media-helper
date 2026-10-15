@@ -116,11 +116,11 @@ enum SlideRenderer: String, Equatable, CaseIterable {
         NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
     }
 
-    /// The program to use, in order of preference: LibreOffice, PowerPoint, Keynote. Keynote files only
-    /// open in Keynote. PDFs need none. `forced` is for testing a particular path.
+    /// The program to use, in order of preference: LibreOffice, PowerPoint, Keynote. Keynote files prefer
+    /// Keynote and fall back to LibreOffice, which reads them less faithfully. PDFs need none. `forced` is for testing a particular path.
     static func choose(forExtension ext: String, installed: Installed, forced: SlideRenderer? = nil) -> SlideRenderer? {
         let e = ext.lowercased()
-        let allowed: [SlideRenderer] = e == "key" ? [.keynote] : [.libreOffice, .powerPoint, .keynote]
+        let allowed: [SlideRenderer] = e == "key" ? [.keynote, .libreOffice] : [.libreOffice, .powerPoint, .keynote]
         if let forced { return allowed.contains(forced) && installed.has(forced) ? forced : nil }
         return allowed.first { installed.has($0) }
     }
@@ -128,7 +128,7 @@ enum SlideRenderer: String, Equatable, CaseIterable {
     /// Friendly words for when nothing suitable is installed.
     static func missingMessage(forExtension ext: String) -> String {
         if ext.lowercased() == "key" {
-            return "Keynote files need Keynote, which is free from the App Store. Install it and try again."
+            return "Keynote files need Keynote (free from the App Store) or LibreOffice (free from libreoffice.org). Install one of them and try again."
         }
         return "To turn PowerPoint files into pictures, this Mac needs Keynote (free from the App Store), Microsoft PowerPoint, or LibreOffice (free from libreoffice.org). Install one of them and try again."
     }
